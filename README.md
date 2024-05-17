@@ -1,25 +1,23 @@
 # pytorch-cuda
 
 This is a project for building pytorch with CUDA in Fedora based container
-images.  CUDA has hard requirements on gcc versions, so this includes building
-gcc as well.
+images.
 
 ## HOWTO
 
-I have already built the gcc container and published it in quay.io, so it can
-be used directly.  However, this is built on Fedora Rawhide, and it moves fast
-so it may be desirable to update.
+There are some optional ARGs.  You can override the defaults by adding
+`--build-arg arg=value` to the `podman build` command.
 
-Build gcc image.  NOTE it will take a long time!
-
-```bash
-export GCC_IMAGE=<your image name>
-podman build -f Containerfile.gcc -t $GCC_IMAGE .
-```
-
-Next build the pytorch image using your previously built gcc.
+ARGs with their defaults:
+* CUDA_DISTRO=fedora39
+* CUDNN_VERSION=9.1.0.70_cuda12
+* CUSPARSELT_VERSION=0.6.1.0
 
 ```bash
-podman build -f Containerfile -t pytorch-cuda:latest \
-       --build-arg GCC_IMAGE=$GCC_IMAGE .
+podman build -t pytorch-cuda:latest .
 ```
+
+## Other stuff
+
+There is an experiment in the `fedora41` directory for building pytorch on
+Fedora 41 using the Fedora 39 version of gcc.
