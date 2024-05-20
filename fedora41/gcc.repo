@@ -1,5 +1,0 @@
-[gcclocal]
-name=gcc repo
-baseurl=file:///rpmbuild/RPMS/x86_64/
-enabled=1
-gpgcheck=0
