@@ -1,0 +1,73 @@
+FROM fedora:39
+
+ENV HOME=/
+
+RUN dnf install -y git rpmdevtools 'dnf-command(builddep)' && \
+    rpmdev-setuptree
+
+WORKDIR /rpmbuild
+
+# Install gcc 12 from Fedora 37 to /gcc12
+RUN mkdir -p /gcc12 && \
+    dnf install -y --releasever=37 --installroot=/gcc12 \
+                gcc gcc-c++ gcc-plugin-annobin annobin-plugin-gcc
+
+ENV CC=/gcc12/bin/gcc
+ENV CXX=/gcc12/bin/g++
+ENV LD_LIBRARY_PATH=/usr/lib64:/gcc12/usr/lib64
+
+# Build protobuf using F37 toolchain
+RUN dnf download --source protobuf && \
+    mv protobuf*.src.rpm SRPMS/
+RUN dnf builddep -y SRPMS/protobuf*.src.rpm
+RUN rpmbuild --without java --rebuild SRPMS/protobuf*.src.rpm
+RUN cd RPMS/$(arch) && \
+    dnf install -y protobuf-devel-[0-9]*.rpm protobuf-compiler-[0-9]*.rpm \
+                   protobuf-lite-[0-9]*.rpm protobuf-[0-9]*.rpm
+
+# Build onnx using F37 toolchain
+RUN dnf download --source onnx && \
+    mv onnx*.src.rpm SRPMS/
+RUN dnf builddep -y SRPMS/onnx*.src.rpm
+RUN rpmbuild --rebuild SRPMS/onnx*.src.rpm
+RUN cd RPMS/$(arch) && \
+    dnf install -y onnx-devel-[0-9]*.rpm onnx-libs-[0-9]*.rpm
+
+WORKDIR /src
+
+# Pull python-torch packaging from Fedora and set up build tree
+RUN git clone --depth 1 https://src.fedoraproject.org/rpms/python-torch.git && \
+    mv python-torch/python-torch.spec /rpmbuild/SPECS/ && \
+    mv python-torch/* /rpmbuild/SOURCES/
+
+WORKDIR /rpmbuild
+
+# TODO --undefine=_disable_source_fetch is not safe but downloads the cuda deps
+RUN rpmbuild --undefine=_disable_source_fetch --without rocm --with cuda -bs SPECS/python-torch.spec
+
+RUN dnf builddep -y SRPMS/python-torch*.src.rpm
+
+# Install RHEL9 versions of CUDA, CUDNN, and cuSPARSELt
+ARG CUDA_DISTRO=rhel9
+ARG CUDA_VERSION=12-3
+RUN dnf install -y 'dnf-command(config-manager)' && \
+    dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/${CUDA_DISTRO}/$(arch)/cuda-${CUDA_DISTRO}.repo && \
+    dnf install -y cuda-toolkit-${CUDA_VERSION} cudnn cudnn9-cuda-${CUDA_VERSION} \
+                   libcusparselt0 libcusparselt-devel
+
+# Tell CUDA to use the gcc12 install instead of the system gcc
+RUN ln -s /gcc12/bin/c++ /usr/local/cuda/bin/c++ && \
+    ln -s /gcc12/bin/gcc /usr/local/cuda/bin/gcc && \
+    ln -s /gcc12/bin/g++ /usr/local/cuda/bin/g++
+
+ENV PATH=/usr/local/cuda/bin:${PATH}
+
+# CUDA installs to /usr/local/cuda which is an "invalid runpath"
+# Ignore those errors from check-rpaths using the QA_RPATHS variable
+RUN QA_RPATHS=$(( 0x0002 )) rpmbuild --without rocm --with cuda --rebuild SRPMS/python-torch*.src.rpm
+
+# TODO testing, should be in new stage
+RUN dnf install -y /rpmbuild/RPMS/*/python3-torch-[0-9]*.rpm
+
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV NVIDIA_VISIBLE_DEVICES=all

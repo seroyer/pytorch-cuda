@@ -9,12 +9,11 @@ There are some optional ARGs.  You can override the defaults by adding
 `--build-arg arg=value` to the `podman build` command.
 
 ARGs with their defaults:
-* CUDA_DISTRO=fedora37
-* CUDNN_VERSION=9.1.0.70_cuda12
-* CUSPARSELT_VERSION=0.6.1.0
+* CUDA_DISTRO=rhel9
+* CUDA_VERSION=12-3
 
 ```bash
-podman build -t pytorch-cuda:latest cuda12.1
+podman build -t pytorch-cuda:latest cuda12.3
 ```
 
 ## Other stuff
